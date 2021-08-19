@@ -1,5 +1,6 @@
 (ns image-min-for-eric.core
-  (:require [fn-fx.fx-dom :as dom]
+ (:require [clojure.java.io :as io]
+            [fn-fx.fx-dom :as dom]
             [fn-fx.diff :refer [component defui render should-update?]]
             [fn-fx.controls :as ui])
   (:gen-class))
@@ -23,26 +24,28 @@
                              :on-action {:event :delete-item :idx idx}))))
 
 (defui MainWindow
-       (render [this {:keys [items]}]
+       (render [this {:keys [todos]}]
           (ui/v-box
             :style "-fx-base: rgb(30, 30, 35);"
             :padding (ui/insets :top-right-bottom-left 25)
             :children [(ui/text-field
-                         :id ::new-item
-                         :prompt-text "What needs to be done?"
-                         :font main-font
-                         :on-action {:event :add-item
-                                     :fn-fx/include {::new-item #{:text}}})
-
-                       (ui/file-chooser
-                         :titleProperty "Test"
-                         )
+                        :id ::input
+                        :prompt-text "Directory"
+                        :font main-font
+                        :on-action {:event :add-item
+                                    :fn-fx/include {::input #{:text}}})
 
                        (ui/v-box
                          :children (map-indexed
-                                     (fn [idx todo]
-                                       (todo-item (assoc todo :idx idx)))
-                                     items))])))
+                                    (fn [idx todo]
+                                      (todo-item (assoc todo :idx idx)))
+                                    todos))
+
+                       (when (not= 0 (count todos))
+                         (ui/button :text "Load Folder"
+                                    :font main-font
+                                    :on-action {:event :check-folder
+                                                :fn-fx/include {::input #{:text}}}))])))
 
 (defui Stage
        (render [this args]
@@ -50,7 +53,7 @@
            :title "Image Converter for Éric ♡"
            :min-height 600
            :listen/height {:event :height-change
-                           :fn-fx/include {::new-item #{:text}}}
+                           :fn-fx/include {::input #{:text}}}
            :shown true
            :scene (ui/scene
                     :root (main-window args)))))
@@ -67,13 +70,20 @@
   [state {:keys [idx]}]
   (update-in state [:todos idx :done?] (fn [x]
                                          (not x))))
+(defn item [i]
+  {:done? false :text i})
 
 (defmethod handle-event :check-folder
-  [state {:keys [folder]}]
-  (update-in state [:todos] (fn [itms]
-                              (println itms folder)
-                              ;; code to check what files exist in the folder
-                              )))
+  [state {:keys [fn-fx/includes]}]
+  (let [folder-name (get-in includes [::input :text])
+        folder (.list (io/file folder-name))]
+    (update-in state [:todos] conj
+               (map item folder))))
+
+(defmethod handle-event :add-item
+  [state {:keys [fn-fx/includes]}]
+  (update-in state [:todos] conj {:done? false
+                                  :text (get-in includes [::input :text])}))
 
 (defmethod handle-event :delete-item
   [state {:keys [idx]}]
@@ -82,10 +92,6 @@
                               (vec (concat (take idx itms)
                                            (drop (inc idx) itms))))))
 
-(defmethod handle-event :add-item
-  [state {:keys [fn-fx/includes]}]
-  (update-in state [:todos] conj {:done? false
-                                  :text (get-in includes [::new-item :text])}))
 
 (defmethod handle-event :default
   [state event]
