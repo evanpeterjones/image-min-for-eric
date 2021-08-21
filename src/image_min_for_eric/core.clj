@@ -28,24 +28,24 @@
           (ui/v-box
             :style "-fx-base: rgb(30, 30, 35);"
             :padding (ui/insets :top-right-bottom-left 25)
-            :children [(ui/text-field
+            :children [(when (not= 0 (count todos))
+                         (ui/button :text "Load Folder"
+                                    :font main-font
+                                    :on-action {:event :check-folder
+                                                :fn-fx/include {::input #{:text}}}))
+
+                       (ui/text-field
                         :id ::input
                         :prompt-text "Directory"
                         :font main-font
-                        :on-action {:event :add-item
+                        :on-action {:event :check-folder
                                     :fn-fx/include {::input #{:text}}})
 
                        (ui/v-box
                          :children (map-indexed
                                     (fn [idx todo]
                                       (todo-item (assoc todo :idx idx)))
-                                    todos))
-
-                       (when (not= 0 (count todos))
-                         (ui/button :text "Load Folder"
-                                    :font main-font
-                                    :on-action {:event :check-folder
-                                                :fn-fx/include {::input #{:text}}}))])))
+                                    todos))])))
 
 (defui Stage
        (render [this args]
@@ -77,8 +77,7 @@
   [state {:keys [fn-fx/includes]}]
   (let [folder-name (get-in includes [::input :text])
         folder (.list (io/file folder-name))]
-    (update-in state [:todos] conj
-               (map item folder))))
+    (update-in state [:todos] into (map item folder))))
 
 (defmethod handle-event :add-item
   [state {:keys [fn-fx/includes]}]
@@ -86,9 +85,10 @@
                                   :text (get-in includes [::input :text])}))
 
 (defmethod handle-event :delete-item
-  [state {:keys [idx]}]
+  [state {:keys [idx] :as asdf}]
   (update-in state [:todos] (fn [itms]
                               (println itms idx)
+                              (println (keys asdf))
                               (vec (concat (take idx itms)
                                            (drop (inc idx) itms))))))
 
@@ -106,6 +106,7 @@
         ;; handler-fn handles events from the ui and updates the data state
         handler-fn (fn [event]
                      (try
+                       (println event)
                        (swap! data-state handle-event event)
                        (catch Throwable ex
                          (println ex))))
