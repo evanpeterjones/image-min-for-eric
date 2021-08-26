@@ -1,62 +1,53 @@
 (ns image-min-for-eric.core
- (:require [clojure.java.io :as io]
-            [fn-fx.fx-dom :as dom]
-            [fn-fx.diff :refer [component defui render should-update?]]
-            [fn-fx.controls :as ui])
+  (:require [clojure.java.io :as io]
+            [seesaw.core :as ss])
+  ;(:import 'javafx.geometry.Pos)
   (:gen-class))
 
-(def main-font (ui/font :family "Helvetica" :size 20))
+(def main-font {:font "Helvetica"
+                :size 20
+                :color "White"})
 
-(defui TodoItem
-       (render [this {:keys [done? idx text]}]
-         (ui/border-pane
-           :padding (ui/insets
-                      :top 10
-                      :bottom 10
-                      :left 0
-                      :right 0)
-           :left (ui/check-box
-                      :font main-font
-                      :text text
-                      :selected done?
-                      :on-action {:event :swap-status :idx idx})
-           :right (ui/button :text "X"
-                             :on-action {:event :delete-item :idx idx}))))
+(defn TodoItem [{:keys [done? idx text]}]
+  (ss/border-panel
+    :padding (ss/insets
+               :top 10
+               :bottom 10
+               :left 0
+               :right 0)
+    :left (ss/checkbox
+            :font main-font
+            :text text
+            :selected done?
+            :on-action {:event :swap-status :idx idx})
+    :right (ss/button :text "X"
+                      :on-action {:event :delete-item :idx idx})))
 
-(defui MainWindow
-       (render [this {:keys [todos]}]
-          (ui/v-box
-            :style "-fx-base: rgb(30, 30, 35);"
-            :padding (ui/insets :top-right-bottom-left 25)
-            :children [(when (not= 0 (count todos))
-                         (ui/button :text "Load Folder"
-                                    :font main-font
-                                    :on-action {:event :check-folder
-                                                :fn-fx/include {::input #{:text}}}))
+(defn MainWindow [{:keys [todos]}]
+  (ss/box-panel
+    :style "-fx-base: rgb(30, 30, 35);"
+    :padding nil                                       ;(ss/insets :top-right-bottom-left 25)
+    :children [(ss/box-panel
+                 ;:alignment (javafx.geometry.Pos/CENTER)
+                 :children [(ss/button :text "Select Directory"
+                                       :font main-font
+                                       :on-action {:event :pick-folder
+                                                   :fn-fx/include {::input #{:text}}})
 
-                       (ui/text-field
-                        :id ::input
-                        :prompt-text "Directory"
-                        :font main-font
-                        :on-action {:event :check-folder
-                                    :fn-fx/include {::input #{:text}}})
+                            (ss/button :text "Process Images"
+                                       :font main-font
+                                       :on-action {:event :process-images
+                                                   :fn-fx/include {::input #{:text}}})])
 
-                       (ui/v-box
-                         :children (map-indexed
-                                    (fn [idx todo]
-                                      (todo-item (assoc todo :idx idx)))
-                                    todos))])))
+               (ss/v-bo
+                 :children (map-indexed
+                             (fn [idx todo]
+                               (todo-item (assoc todo :idx idx)))
+                             todos))]))
 
 (defui Stage
        (render [this args]
-         (ui/stage
-           :title "Image Converter for Éric ♡"
-           :min-height 600
-           :listen/height {:event :height-change
-                           :fn-fx/include {::input #{:text}}}
-           :shown true
-           :scene (ui/scene
-                    :root (main-window args)))))
+               ))
 
 (defmulti handle-event (fn [state event]
                           (:event event)))
@@ -73,10 +64,13 @@
 (defn item [i]
   {:done? false :text i})
 
-(defmethod handle-event :check-folder
+(defmethod handle-event :pick-folder
   [state {:keys [fn-fx/includes]}]
-  (let [folder-name (get-in includes [::input :text])
-        folder (.list (io/file folder-name))]
+  (let [window (.getWindow (.getScene (:target (:fn-fx/event includes))))
+        dialog (doto (javafx.stage.FileChooser.) (.setTitle "Pick Directory"))
+        file (utils/run-and-wait (.showOpenDialog dialog window))
+        ;        folder-name (get-in includes [::input :text])
+        folder (.list (io/file file))]
     (update-in state [:todos] into (map item folder))))
 
 (defmethod handle-event :add-item
@@ -87,11 +81,8 @@
 (defmethod handle-event :delete-item
   [state {:keys [idx] :as asdf}]
   (update-in state [:todos] (fn [itms]
-                              (println itms idx)
-                              (println (keys asdf))
                               (vec (concat (take idx itms)
                                            (drop (inc idx) itms))))))
-
 
 (defmethod handle-event :default
   [state event]
@@ -101,7 +92,7 @@
 (defn -main []
   (let [;; Data State holds the business logic of our app
         data-state (atom {:todos [{:done? false
-                                   :text  "Take out trash"}]})
+                                   :text  "Test"}]})
 
         ;; handler-fn handles events from the ui and updates the data state
         handler-fn (fn [event]
@@ -123,7 +114,20 @@
                                           (catch Throwable ex
                                             (println ex)))))))))
 
-(comment
-  (-main)
 
-  )
+(defn main []
+  (ss/native!)
+  (let [data-state (atom {:todos [{:done? false
+                                   :text  "Test"}]})]
+    (ss/invoke-later
+      (-> (ss/frame :title "Image Converter for Éric ♡",
+                    :content (ss/window
+                              :title "Image Converter for Éric ♡",
+                              :min-height 600,
+                              :listen/height {:event :height-change
+                                              :fn-fx/include {::input #{:text}}},
+                              :shown true,
+                              :scene (main-window args))
+                    :on-close :exit)
+          ss/pack!
+          ss/show!))))
